@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Price Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500;700&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:     #060708;
+  --s1:     #0c0d11;
+  --s2:     #111318;
+  --s3:     #181a22;
+  --s4:     #1e2028;
+  --b1:     rgba(255,255,255,.055);
+  --b2:     rgba(255,255,255,.10);
+  --b3:     rgba(255,255,255,.18);
+  --accent: #c8f135;
+  --a08:    rgba(200,241,53,.08);
+  --a15:    rgba(200,241,53,.15);
+  --a30:    rgba(200,241,53,.3);
+  --green:  #4ade80;
+  --gr10:   rgba(74,222,128,.10);
+  --red:    #f87171;
+  --re10:   rgba(248,113,113,.10);
+  --blue:   #60a5fa;
+  --bl10:   rgba(96,165,250,.10);
+  --orange: #fb923c;
+  --or10:   rgba(251,146,60,.10);
+  --muted:  #666880;
+  --text:   #dde0f0;
+  --dim:    #252736;
+  --mono:   'JetBrains Mono', monospace;
+  --disp:   'Syne', sans-serif;
+  --body:   'Instrument Sans', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 32px 16px 80px;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: radial-gradient(rgba(200,241,53,.025) 1px, transparent 1px);
+  background-size: 30px 30px;
+  pointer-events: none; z-index: 0;
+}
+.wrap { max-width: 980px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* HEADER */
+.hdr { margin-bottom: 28px; animation: up .5s ease both; }
+.eye {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--accent);
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.eye::before { content: ''; width: 20px; height: 1px; background: var(--accent); }
+h1 {
+  font-family: var(--disp); font-size: clamp(22px, 4vw, 36px);
+  font-weight: 800; letter-spacing: -.03em; line-height: 1.08; margin-bottom: 8px;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.sub { font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 500px; }
+
+/* CONNECTION BAR */
+.conn-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--s1);
+  border: 1px solid var(--b1); border-radius: 10px;
+  margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+  animation: up .4s ease both;
+}
+.conn-left  { display: flex; align-items: center; gap: 10px; }
+.conn-right { display: flex; align-items: center; gap: 8px; }
+.cdot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--dim); transition: background .3s; flex-shrink: 0;
+}
+.cdot.connecting { background: var(--orange); animation: pulse 1s ease infinite; }
+.cdot.live       { background: var(--green); }
+.cdot.error      { background: var(--red); }
+.clabel { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.cstreams { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* SOURCE BADGE */
+.src-info {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: var(--bl10);
+  border: 1px solid rgba(96,165,250,.2); border-radius: 6px;
+  font-family: var(--mono); font-size: 10px; color: var(--blue);
+}
+.src-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--blue); animation: pulse .9s ease infinite; }
+
+/* PAIR GRID */
+.pair-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px; margin-bottom: 12px;
+}
+
+/* PAIR CARD */
+.pair-card {
+  background: var(--s1); border: 1px solid var(--b1);
+  border-radius: 16px; overflow: hidden;
+  transition: border-color .15s;
+  animation: up .45s ease both;
+}
+.pair-card.flash-up   { animation: fup .35s ease both; }
+.pair-card.flash-down { animation: fdn .35s ease both; }
+
+.pc-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 15px; background: var(--s2); border-bottom: 1px solid var(--b1);
+}
+.pc-name {
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  color: var(--text); display: flex; align-items: center; gap: 7px;
+}
+.chain-tag {
+  font-size: 9px; font-weight: 700; padding: 2px 7px;
+  border-radius: 3px; font-family: var(--mono);
+}
+.pc-hd-right { display: flex; align-items: center; gap: 7px; }
+.live-badge {
+  font-family: var(--mono); font-size: 9px; padding: 2px 8px;
+  border-radius: 3px; display: flex; align-items: center; gap: 4px;
+  border: 1px solid;
+}
+.live-badge.on   { background: var(--gr10); color: var(--green); border-color: rgba(74,222,128,.25); }
+.live-badge.off  { background: var(--re10); color: var(--red);   border-color: rgba(248,113,113,.2); }
+.live-badge.wait { background: var(--or10); color: var(--orange); border-color: rgba(251,146,60,.2); }
+.lbdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.live-badge.on .lbdot { animation: pulse .8s ease infinite; }
+.rm-btn {
+  width: 20px; height: 20px; border-radius: 4px;
+  background: transparent; border: 1px solid var(--b1);
+  color: var(--muted); font-size: 14px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.rm-btn:hover { background: var(--re10); border-color: rgba(248,113,113,.3); color: var(--red); }
+
+.pc-bd { padding: 15px; }
+
+/* PRICE */
+.price {
+  font-family: var(--mono); font-size: 34px; font-weight: 700;
+  letter-spacing: -.02em; line-height: 1; margin-bottom: 5px;
+  transition: color .12s;
+}
+.price.up   { color: var(--green); }
+.price.down { color: var(--red); }
+.price.flat { color: var(--accent); }
+.price.idle { color: var(--muted); }
+
+.price-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 13px; flex-wrap: wrap;
+}
+.pchange {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+}
+.pchange.up   { color: var(--green); }
+.pchange.down { color: var(--red); }
+.pchange.flat { color: var(--muted); }
+.psrc  { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.pts   { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: auto; }
+
+/* STATS */
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 11px; }
+.stat {
+  background: var(--s3); border: 1px solid var(--b1);
+  border-radius: 7px; padding: 8px 9px;
+}
+.stat-l { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.stat-v { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.stat-v.hi  { color: var(--green); }
+.stat-v.lo  { color: var(--red); }
+.stat-v.vol { color: var(--blue); }
+.stat-v.neu { color: var(--text); }
+
+/* SPREAD */
+.spread-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; background: var(--s3);
+  border: 1px solid var(--b1); border-radius: 7px;
+  margin-bottom: 11px; font-family: var(--mono); font-size: 11px;
+}
+.spread-lbl { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; min-width: 44px; }
+.spread-bid { color: var(--green); font-weight: 700; }
+.spread-ask { color: var(--red);   font-weight: 700; }
+.spread-mid { color: var(--muted); font-size: 10px; margin-left: auto; }
+
+/* SPARKLINE */
+.spark { height: 46px; margin-bottom: 10px; }
+.spark canvas { width: 100%; height: 100%; display: block; }
+
+/* TICK FEED */
+.ticks { border-top: 1px solid var(--b1); padding-top: 9px; }
+.tick-hdr { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 5px; }
+.tick {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--b1);
+  font-family: var(--mono); font-size: 10px;
+  animation: tick-in .18s ease both;
+}
+.tick:last-child { border-bottom: none; }
+.tick-p { font-weight: 700; }
+.tick-p.buy  { color: var(--green); }
+.tick-p.sell { color: var(--red); }
+.tick-q { color: var(--muted); text-align: right; }
+.tick-t { color: var(--dim); }
+
+/* ADD PAIR */
+.add-wrap {
+  background: var(--s1); border: 1px dashed var(--b2);
+  border-radius: 16px; padding: 18px; margin-bottom: 10px;
+  animation: up .5s ease both;
+}
+.add-title { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.add-row { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; }
+.add-row input, .add-row select {
+  background: var(--s2); border: 1px solid var(--b2);
+  border-radius: 8px; color: var(--text); font-family: var(--mono);
+  font-size: 12px; padding: 9px 11px; outline: none;
+  transition: border-color .15s, box-shadow .15s; flex: 1; min-width: 90px;
+}
+.add-row input:focus, .add-row select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px rgba(200,241,53,.05);
+}
+.add-row input::placeholder { color: var(--dim); }
+.add-row select {
+  appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23666880' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; padding-right: 26px;
+}
+.add-row select option { background: #14151c; }
+.btn {
+  padding: 9px 16px; border-radius: 8px; border: 1px solid var(--b2);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: .05em; cursor: pointer; transition: all .15s;
+  background: transparent; color: var(--text); white-space: nowrap;
+}
+.btn:hover  { border-color: var(--b3); background: var(--s3); }
+.btn:active { transform: scale(.98); }
+.btn.acc { background: var(--accent); color: #060708; border-color: var(--accent); }
+.btn.acc:hover { opacity: .9; }
+.add-hint { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+.qpills { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.qpill {
+  font-family: var(--mono); font-size: 9px; padding: 3px 9px;
+  border-radius: 4px; border: 1px solid var(--b1);
+  color: var(--muted); cursor: pointer; transition: all .12s; background: transparent;
+}
+.qpill:hover { border-color: var(--a30); color: var(--accent); background: var(--a08); }
+.qlbl { font-size: 10px; color: var(--dim); }
+
+/* DEBUG */
+.dbg { background: var(--s1); border: 1px solid var(--b1); border-radius: 12px; overflow: hidden; }
+.dbg-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 15px; background: var(--s2); border-bottom: 1px solid var(--b1);
+  cursor: pointer; transition: background .12s;
+}
+.dbg-hd:hover { background: var(--s3); }
+.dbg-title { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.dbg-tog   { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.dbg-bd { display: none; padding: 11px 15px; }
+.dbg-bd.open { display: block; }
+.log-area {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  line-height: 1.9; max-height: 220px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-all;
+}
+.lok { color: var(--green); }
+.ler { color: var(--red); }
+.lwa { color: var(--orange); }
+.lin { color: var(--blue); }
+
+.disc { text-align: center; font-size: 10px; color: var(--dim); margin-top: 28px; line-height: 1.7; }
+
+@keyframes up     { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes tick-in{ from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:translateX(0); } }
+@keyframes fup    { 0%,100%{border-color:var(--b1)} 40%{border-color:rgba(74,222,128,.55)} }
+@keyframes fdn    { 0%,100%{border-color:var(--b1)} 40%{border-color:rgba(248,113,113,.45)} }
+
+@media(max-width:560px){
+  .pair-grid { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="eye">DLMM Toolkit · Phase 1</div>
+  <h1>Live Price <em>Feed</em></h1>
+  <p class="sub">Real-time WebSocket stream from Coinbase Advanced Trade. Prices tick every trade — works anywhere, no geo-restrictions. Built for Base Network pairs.</p>
+</div>
+
+<!-- CONNECTION BAR -->
+<div class="conn-bar">
+  <div class="conn-left">
+    <div class="cdot connecting" id="cdot"></div>
+    <span class="clabel" id="clabel">Connecting to Coinbase WebSocket...</span>
+  </div>
+  <div class="conn-right">
+    <div class="src-info">
+      <div class="src-dot"></div>
+      Coinbase Advanced Trade · wss://advanced-trade-ws.coinbase.com
+    </div>
+    <span class="cstreams" id="cstreams">0 products</span>
+    <button class="btn" style="padding:6px 12px;font-size:10px" onclick="reconnect()">↻ Reconnect</button>
+  </div>
+</div>
+
+<!-- PAIR CARDS -->
+<div class="pair-grid" id="grid"></div>
+
+<!-- ADD PAIR -->
+<div class="add-wrap">
+  <div class="add-title">Add a pair</div>
+  <div class="add-row">
+    <input type="text" id="aBase"  placeholder="Base  e.g. ETH"  style="text-transform:uppercase;max-width:130px">
+    <input type="text" id="aQuote" placeholder="Quote  e.g. USDC" style="text-transform:uppercase;max-width:130px">
+    <select id="aChain" style="max-width:140px">
+      <option value="base">Base</option>
+      <option value="ethereum">Ethereum</option>
+      <option value="arbitrum">Arbitrum</option>
+      <option value="solana">Solana</option>
+      <option value="optimism">Optimism</option>
+      <option value="bsc">BNB Chain</option>
+      <option value="avalanche">Avalanche</option>
+      <option value="polygon">Polygon</option>
+    </select>
+    <button class="btn acc" onclick="addPair()">+ Add Pair</button>
+  </div>
+  <div class="add-hint">Coinbase product ID is resolved automatically (e.g. WETH → ETH-USDC). Pairs not on Coinbase will show a no-stream badge.</div>
+  <div class="qpills">
+    <span class="qlbl">Quick add:</span>
+    <span class="qpill" onclick="qa('SOL','USDC','solana')">SOL/USDC</span>
+    <span class="qpill" onclick="qa('BTC','USDC','base')">BTC/USDC</span>
+    <span class="qpill" onclick="qa('ETH','USDT','ethereum')">ETH/USDT</span>
+    <span class="qpill" onclick="qa('ARB','USDC','arbitrum')">ARB/USDC</span>
+    <span class="qpill" onclick="qa('MATIC','USDC','polygon')">MATIC/USDC</span>
+    <span class="qpill" onclick="qa('AVAX','USDC','avalanche')">AVAX/USDC</span>
+    <span class="qpill" onclick="qa('LINK','USDC','ethereum')">LINK/USDC</span>
+    <span class="qpill" onclick="qa('DOGE','USDC','ethereum')">DOGE/USDC</span>
+  </div>
+</div>
+
+<!-- DEBUG -->
+<div class="dbg">
+  <div class="dbg-hd" onclick="toggleDbg()">
+    <span class="dbg-title">WebSocket Debug Log</span>
+    <span class="dbg-tog" id="dtog">show ▾</span>
+  </div>
+  <div class="dbg-bd" id="dbd">
+    <div class="log-area" id="log">Waiting...</div>
+  </div>
+</div>
+
+<p class="disc">
+  Price data from Coinbase Advanced Trade public WebSocket (no API key required).<br>
+  CEX reference price — use alongside DEX pool data for DLMM positioning. Not financial advice.
+</p>
+
+</div>
+<script>
+// ─────────────────────────────────────────
+// COINBASE PRODUCT MAP
+// base/quote → Coinbase product_id
+// ─────────────────────────────────────────
+const CB_MAP = {
+  // Normalize wrapped/bridged tokens to their Coinbase equivalent
+  'WETH-USDC':  'ETH-USDC',
+  'WETH-USDT':  'ETH-USDT',
+  'WBTC-USDC':  'BTC-USDC',
+  'WBTC-USDT':  'BTC-USDT',
+  'CBBTC-USDC': 'BTC-USDC',
+  'CBBTC-USDT': 'BTC-USDT',
+  'CBETH-USDC': 'ETH-USDC',
+  'WETH-USD':   'ETH-USD',
+  'WBTC-USD':   'BTC-USD',
+  // Standard pairs — Coinbase uses BASE-QUOTE format
+  'ETH-USDC':   'ETH-USDC',
+  'ETH-USDT':   'ETH-USDT',
+  'ETH-USD':    'ETH-USD',
+  'BTC-USDC':   'BTC-USDC',
+  'BTC-USDT':   'BTC-USDT',
+  'BTC-USD':    'BTC-USD',
+  'SOL-USDC':   'SOL-USDC',
+  'SOL-USD':    'SOL-USD',
+  'ARB-USDC':   'ARB-USDC',
+  'ARB-USD':    'ARB-USD',
+  'OP-USDC':    'OP-USDC',
+  'OP-USD':     'OP-USD',
+  'MATIC-USDC': 'MATIC-USDC',
+  'MATIC-USD':  'MATIC-USD',
+  'AVAX-USDC':  'AVAX-USDC',
+  'AVAX-USD':   'AVAX-USD',
+  'LINK-USDC':  'LINK-USDC',
+  'LINK-USD':   'LINK-USD',
+  'UNI-USDC':   'UNI-USDC',
+  'DOGE-USDC':  'DOGE-USDC',
+  'DOGE-USD':   'DOGE-USD',
+  'ADA-USDC':   'ADA-USDC',
+  'DOT-USDC':   'DOT-USDC',
+  'LTC-USDC':   'LTC-USDC',
+  'XRP-USD':    'XRP-USD',
+  'SUI-USDC':   'SUI-USDC',
+  'APT-USDC':   'APT-USDC',
+  'NEAR-USDC':  'NEAR-USDC',
+  'ATOM-USDC':  'ATOM-USDC',
+  'AAVE-USDC':  'AAVE-USDC',
+  'CRV-USDC':   'CRV-USDC',
+  'LDO-USDC':   'LDO-USDC',
+  'JTO-USDC':   'JTO-USDC',
+  'PEPE-USDC':  'PEPE-USDC',
+  'SHIB-USDC':  'SHIB-USDC',
+};
+
+const CHAIN_META = {
+  base:      { label:'Base',      color:'#60a5fa' },
+  ethereum:  { label:'Ethereum',  color:'#818cf8' },
+  arbitrum:  { label:'Arbitrum',  color:'#60a5fa' },
+  solana:    { label:'Solana',    color:'#a78bfa' },
+  optimism:  { label:'Optimism',  color:'#f87171' },
+  bsc:       { label:'BNB',       color:'#fbbf24' },
+  avalanche: { label:'Avalanche', color:'#f87171' },
+  polygon:   { label:'Polygon',   color:'#a78bfa' },
+};
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+const DEFAULT_PAIRS = [
+  { base:'WETH',  quote:'USDC', chain:'base' },
+  { base:'cbBTC', quote:'USDC', chain:'base' },
+];
+
+let pairs    = [];
+let ws       = null;          // single multiplexed WebSocket
+let wsReady  = false;
+const pData  = {};            // productId → live data
+const pMap   = {};            // pairId → cbProductId
+
+// ─────────────────────────────────────────
+// LOGGING
+// ─────────────────────────────────────────
+function lg(type, msg) {
+  const el  = document.getElementById('log');
+  if (!el) return;
+  const t   = new Date().toLocaleTimeString('en', { hour12:false });
+  const cls = { ok:'lok', err:'ler', warn:'lwa', info:'lin' }[type] || '';
+  const ico = { ok:'✓', err:'✗', warn:'⚠', info:'→' }[type] || ' ';
+  el.innerHTML += `<span class="${cls}">[${t}] ${ico} ${msg}</span>\n`;
+  el.scrollTop  = el.scrollHeight;
+}
+function toggleDbg() {
+  const bd = document.getElementById('dbd');
+  bd.classList.toggle('open');
+  document.getElementById('dtog').textContent = bd.classList.contains('open') ? 'hide ▴' : 'show ▾';
+}
+
+// ─────────────────────────────────────────
+// FORMATTERS
+// ─────────────────────────────────────────
+function fp(n) {
+  if (!n || isNaN(n)) return '—';
+  if (n >= 10000)  return '$' + Math.round(n).toLocaleString();
+  if (n >= 1000)   return '$' + n.toLocaleString('en', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  if (n >= 100)    return '$' + n.toFixed(2);
+  if (n >= 1)      return '$' + n.toFixed(4);
+  if (n >= 0.0001) return '$' + n.toFixed(6);
+  return '$' + n.toFixed(10);
+}
+function fq(n) {
+  if (!n || isNaN(n)) return '—';
+  if (n >= 1e9) return (n/1e9).toFixed(2)+'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'k';
+  return n.toFixed(3);
+}
+function fts(ms) { return new Date(ms).toLocaleTimeString('en', { hour12:false }); }
+function fct(n, d=3) {
+  if (!n && n!==0) return '—';
+  return (n >= 0 ? '+' : '') + n.toFixed(d) + '%';
+}
+
+// ─────────────────────────────────────────
+// PAIR HELPERS
+// ─────────────────────────────────────────
+function pid(p) { return `${p.base.toUpperCase()}-${p.quote.toUpperCase()}-${p.chain}`; }
+
+function toCbProduct(base, quote) {
+  const key = `${base.toUpperCase()}-${quote.toUpperCase()}`;
+  return CB_MAP[key] || null;
+}
+
+// ─────────────────────────────────────────
+// SINGLE WEBSOCKET — Coinbase multiplexed
+// One WS connection handles all product subscriptions
+// ─────────────────────────────────────────
+const CB_WS_URL = 'wss://advanced-trade-ws.coinbase.com';
+
+function openWS() {
+  if (ws && ws.readyState <= WebSocket.OPEN) return;
+
+  lg('info', `Opening WebSocket → ${CB_WS_URL}`);
+  setConn('connecting', 'Connecting to Coinbase...');
+
+  ws = new WebSocket(CB_WS_URL);
+
+  ws.onopen = () => {
+    wsReady = true;
+    lg('ok', 'Coinbase WebSocket connected');
+    setConn('live', 'Coinbase Advanced Trade — WebSocket live');
+    // Subscribe to all current pairs
+    subscribeAll();
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleMsg(msg);
+    } catch(err) {}
+  };
+
+  ws.onerror = () => {
+    lg('err', 'WebSocket error — will retry');
+    setConn('error', 'Connection error — retrying...');
+  };
+
+  ws.onclose = (e) => {
+    wsReady = false;
+    lg('warn', `WebSocket closed (${e.code}) — reconnecting in 4s`);
+    setConn('connecting', 'Reconnecting...');
+    pairs.forEach(p => setBadge(pid(p), 'wait'));
+    setTimeout(openWS, 4000);
+  };
+}
+
+function subscribe(productIds) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const msg = {
+    type: 'subscribe',
+    product_ids: productIds,
+    channel: 'ticker',        // ticker gives best_bid, best_ask, price, volume_24h
+  };
+  ws.send(JSON.stringify(msg));
+  lg('info', `Subscribed: ${productIds.join(', ')}`);
+}
+
+function subscribeAll() {
+  const products = [...new Set(Object.values(pMap).filter(Boolean))];
+  if (products.length) subscribe(products);
+  updateConnStreams();
+}
+
+// ─────────────────────────────────────────
+// MESSAGE HANDLER
+// ─────────────────────────────────────────
+function handleMsg(msg) {
+  const t = msg.type;
+
+  // Subscription confirmations
+  if (t === 'subscriptions') {
+    lg('ok', `Subscription confirmed: ${JSON.stringify(msg.channels||[]).slice(0,80)}`);
+    return;
+  }
+  if (t === 'error') {
+    lg('err', `Coinbase error: ${msg.message}`);
+    return;
+  }
+
+  // Ticker events come as channel=ticker with events array
+  if (msg.channel === 'ticker' && msg.events) {
+    msg.events.forEach(evt => {
+      if (evt.type === 'update' || evt.type === 'snapshot') {
+        (evt.tickers || []).forEach(tick => processTick(tick));
+      }
+    });
+  }
+}
+
+function processTick(tick) {
+  const productId = tick.product_id;
+  if (!productId) return;
+
+  const price   = parseFloat(tick.price)    || 0;
+  const bid     = parseFloat(tick.best_bid) || 0;
+  const ask     = parseFloat(tick.best_ask) || 0;
+  const vol24   = parseFloat(tick.volume_24_h) || 0;
+  const low24   = parseFloat(tick.low_24_h)  || 0;
+  const high24  = parseFloat(tick.high_24_h) || 0;
+  const open24  = parseFloat(tick.open_24_h) || 0;
+  const ts      = tick.time ? new Date(tick.time).getTime() : Date.now();
+
+  if (!pData[productId]) {
+    pData[productId] = {
+      price:0, prev:0, bid:0, ask:0,
+      high24:0, low24:0, open24:0, vol24:0,
+      sessionHigh:0, sessionLow:Infinity,
+      change24:0, history:[], trades:0, lastTs:null,
+    };
+  }
+
+  const d     = pData[productId];
+  d.prev      = d.price;
+  d.price     = price;
+  d.bid       = bid;
+  d.ask       = ask;
+  d.vol24     = vol24;
+  d.high24    = high24  || d.high24;
+  d.low24     = low24   || d.low24;
+  d.open24    = open24  || d.open24;
+  d.change24  = d.open24 ? (price - d.open24) / d.open24 * 100 : 0;
+  d.lastTs    = ts;
+  d.trades++;
+
+  if (!d.sessionHigh || price > d.sessionHigh) d.sessionHigh = price;
+  if (!d.sessionLow  || price < d.sessionLow)  d.sessionLow  = price;
+
+  d.history.push(price);
+  if (d.history.length > 120) d.history.shift();
+
+  // Update all pair cards using this product
+  pairs.forEach(p => {
+    if (pMap[pid(p)] === productId) {
+      setBadge(pid(p), 'live');
+      renderCard(p, d);
+    }
+  });
+}
+
+// ─────────────────────────────────────────
+// RENDER CARD
+// ─────────────────────────────────────────
+function renderCard(p, d) {
+  const id   = pid(p);
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+
+  const price = d.price || 0;
+  const prev  = d.prev  || 0;
+  const dir   = price > prev ? 'up' : price < prev ? 'down' : 'flat';
+
+  // Border flash
+  card.classList.remove('flash-up','flash-down');
+  void card.offsetWidth;
+  if (price !== prev && prev !== 0) {
+    card.classList.add(dir === 'up' ? 'flash-up' : 'flash-down');
+  }
+
+  // Price
+  const pe = card.querySelector('.price');
+  if (pe) {
+    pe.textContent = fp(price);
+    pe.className   = `price ${price === 0 ? 'idle' : dir}`;
+  }
+
+  // Change
+  const ce = card.querySelector('.pchange');
+  if (ce) {
+    ce.textContent = fct(d.change24);
+    ce.className   = `pchange ${d.change24 > 0 ? 'up' : d.change24 < 0 ? 'down' : 'flat'}`;
+  }
+
+  // Timestamp
+  const te = card.querySelector('.pts');
+  if (te && d.lastTs) te.textContent = fts(d.lastTs);
+
+  // Session stats
+  const shi = card.querySelector('.s-hi');
+  const slo = card.querySelector('.s-lo');
+  const svl = card.querySelector('.s-vol');
+  if (shi) shi.textContent = d.sessionHigh ? fp(d.sessionHigh) : '—';
+  if (slo) slo.textContent = (d.sessionLow !== Infinity && d.sessionLow) ? fp(d.sessionLow) : '—';
+  if (svl) svl.textContent = d.vol24 ? fq(d.vol24) : '—';
+
+  // 24h range stats
+  const h24e = card.querySelector('.h24');
+  const l24e = card.querySelector('.l24');
+  if (h24e) h24e.textContent = d.high24 ? fp(d.high24) : '—';
+  if (l24e) l24e.textContent = d.low24  ? fp(d.low24)  : '—';
+
+  // Spread
+  const bidE = card.querySelector('.spread-bid');
+  const askE = card.querySelector('.spread-ask');
+  const midE = card.querySelector('.spread-mid');
+  if (bidE) bidE.textContent = d.bid ? fp(d.bid) : '—';
+  if (askE) askE.textContent = d.ask ? fp(d.ask) : '—';
+  if (midE && d.bid && d.ask) {
+    const spreadPct = ((d.ask - d.bid) / d.bid * 100);
+    midE.textContent = `spread ${spreadPct.toFixed(4)}%`;
+  }
+
+  // Sparkline
+  drawSpark(id, d.history, card);
+}
+
+// ─────────────────────────────────────────
+// SPARKLINE
+// ─────────────────────────────────────────
+function drawSpark(id, hist, card) {
+  const canvas = card.querySelector('canvas');
+  if (!canvas || hist.length < 2) return;
+  const W = canvas.parentElement.offsetWidth || 260;
+  const H = 46;
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const mn  = Math.min(...hist);
+  const mx  = Math.max(...hist);
+  const rng = mx - mn || 1;
+  const x   = i => (i / (hist.length - 1)) * W;
+  const y   = v => H - ((v - mn) / rng) * (H - 6) - 3;
+  const up  = hist[hist.length-1] >= hist[0];
+  const lc  = up ? '#4ade80' : '#f87171';
+  const fc  = up ? 'rgba(74,222,128,.07)' : 'rgba(248,113,113,.06)';
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), H);
+  hist.forEach((v,i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(hist.length-1), H);
+  ctx.closePath();
+  ctx.fillStyle = fc;
+  ctx.fill();
+
+  ctx.beginPath();
+  hist.forEach((v,i) => i===0 ? ctx.moveTo(x(i),y(v)) : ctx.lineTo(x(i),y(v)));
+  ctx.strokeStyle = lc;
+  ctx.lineWidth   = 1.5;
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+
+  // Current price dot
+  const lx = x(hist.length-1);
+  const ly = y(hist[hist.length-1]);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI*2);
+  ctx.fillStyle = lc;
+  ctx.fill();
+}
+
+// ─────────────────────────────────────────
+// BUILD CARD HTML
+// ─────────────────────────────────────────
+function buildCard(p) {
+  const id      = pid(p);
+  const cbProd  = pMap[id];
+  const chain   = CHAIN_META[p.chain] || { label:p.chain, color:'#666' };
+  const srcText = cbProd ? `Coinbase · ${cbProd}` : 'No Coinbase pair';
+
+  return `<div class="pair-card" id="card-${id}">
+    <div class="pc-hd">
+      <div class="pc-name">
+        ${p.base.toUpperCase()}<span style="color:var(--muted)">/${p.quote.toUpperCase()}</span>
+        <span class="chain-tag" style="background:${chain.color}18;color:${chain.color};border:1px solid ${chain.color}33">${chain.label}</span>
+      </div>
+      <div class="pc-hd-right">
+        <div class="live-badge wait" id="badge-${id}">
+          <div class="lbdot"></div>
+          <span id="badge-txt-${id}">${cbProd ? 'connecting' : 'no stream'}</span>
+        </div>
+        <button class="rm-btn" onclick="removePair('${id}')">×</button>
+      </div>
+    </div>
+    <div class="pc-bd">
+      <div class="price idle">—</div>
+      <div class="price-row">
+        <span class="pchange flat">—</span>
+        <span class="psrc">${srcText}</span>
+        <span class="pts">—</span>
+      </div>
+      <!-- Spread row -->
+      <div class="spread-row">
+        <span class="spread-lbl">Bid/Ask</span>
+        <span class="spread-bid">—</span>
+        <span style="color:var(--dim);padding:0 3px">/</span>
+        <span class="spread-ask">—</span>
+        <span class="spread-mid">—</span>
+      </div>
+      <!-- Stats grid -->
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-l">24h High</div>
+          <div class="stat-v hi h24">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-l">24h Low</div>
+          <div class="stat-v lo l24">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-l">24h Volume</div>
+          <div class="stat-v vol s-vol">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-l">Session High</div>
+          <div class="stat-v hi s-hi">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-l">Session Low</div>
+          <div class="stat-v lo s-lo">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-l">24h Change</div>
+          <div class="stat-v neu pchange flat">—</div>
+        </div>
+      </div>
+      <!-- Sparkline -->
+      <div class="spark"><canvas></canvas></div>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────
+// ADD / REMOVE
+// ─────────────────────────────────────────
+function addPairObj(p) {
+  const id = pid(p);
+  if (pairs.find(x => pid(x) === id)) {
+    lg('warn', `${p.base}/${p.quote} already added`); return;
+  }
+
+  const cbProd = toCbProduct(p.base, p.quote);
+  pMap[id]     = cbProd;
+
+  if (cbProd) {
+    lg('info', `${p.base}/${p.quote} → Coinbase product: ${cbProd}`);
+    if (!pData[cbProd]) pData[cbProd] = null;
+  } else {
+    lg('warn', `No Coinbase product found for ${p.base}/${p.quote}`);
+  }
+
+  pairs.push(p);
+
+  // Inject card
+  const grid = document.getElementById('grid');
+  const div  = document.createElement('div');
+  div.innerHTML = buildCard(p);
+  grid.appendChild(div.firstElementChild);
+
+  // Subscribe if WS ready
+  if (cbProd && ws && ws.readyState === WebSocket.OPEN) {
+    subscribe([cbProd]);
+  }
+
+  updateConnStreams();
+  save();
+}
+
+function addPair() {
+  const base  = document.getElementById('aBase').value.trim().toUpperCase();
+  const quote = document.getElementById('aQuote').value.trim().toUpperCase();
+  const chain = document.getElementById('aChain').value;
+  if (!base || !quote) { alert('Enter base and quote token.'); return; }
+  addPairObj({ base, quote, chain });
+  document.getElementById('aBase').value  = '';
+  document.getElementById('aQuote').value = '';
+}
+
+function qa(base, quote, chain) { addPairObj({ base, quote, chain }); }
+
+function removePair(id) {
+  const idx = pairs.findIndex(p => pid(p) === id);
+  if (idx === -1) return;
+  const p = pairs.splice(idx, 1)[0];
+  document.getElementById(`card-${id}`)?.remove();
+  delete pMap[id];
+  lg('info', `Removed ${p.base}/${p.quote}`);
+  updateConnStreams();
+  save();
+}
+
+// ─────────────────────────────────────────
+// BADGE
+// ─────────────────────────────────────────
+function setBadge(id, status) {
+  const b   = document.getElementById(`badge-${id}`);
+  const txt = document.getElementById(`badge-txt-${id}`);
+  if (!b) return;
+  const map = {
+    live: ['on',   'live'],
+    wait: ['wait', 'connecting'],
+    err:  ['off',  'error'],
+    none: ['off',  'no stream'],
+  };
+  const [cls, label] = map[status] || ['off', status];
+  b.className = `live-badge ${cls}`;
+  if (txt) txt.textContent = label;
+}
+
+// ─────────────────────────────────────────
+// CONNECTION STATUS
+// ─────────────────────────────────────────
+function setConn(status, label) {
+  const dot = document.getElementById('cdot');
+  const lbl = document.getElementById('clabel');
+  dot.className = `cdot ${status}`;
+  if (lbl) lbl.textContent = label;
+}
+function updateConnStreams() {
+  const prods = [...new Set(Object.values(pMap).filter(Boolean))];
+  document.getElementById('cstreams').textContent = `${prods.length} product${prods.length!==1?'s':''}`;
+}
+
+// ─────────────────────────────────────────
+// RECONNECT
+// ─────────────────────────────────────────
+function reconnect() {
+  lg('info', 'Manual reconnect');
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  wsReady = false;
+  setTimeout(openWS, 300);
+}
+
+// ─────────────────────────────────────────
+// PERSIST
+// ─────────────────────────────────────────
+function save() {
+  try { localStorage.setItem('dlmm_pairs_v2', JSON.stringify(pairs.map(p => ({ base:p.base, quote:p.quote, chain:p.chain })))); } catch(e){}
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem('dlmm_pairs_v2') || '[]');
+    return s.length ? s : DEFAULT_PAIRS;
+  } catch(e) { return DEFAULT_PAIRS; }
+}
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+function init() {
+  lg('info', 'DLMM Price Feed starting...');
+  lg('info', 'Exchange: Coinbase Advanced Trade (no geo-restrictions)');
+  lg('info', `WebSocket: ${CB_WS_URL}`);
+
+  load().forEach(p => addPairObj(p));
+  openWS();
+
+  // Redraw sparklines on resize
+  window.addEventListener('resize', () => {
+    pairs.forEach(p => {
+      const d = pData[pMap[pid(p)]];
+      if (d?.history?.length) drawSpark(pid(p), d.history, document.getElementById(`card-${pid(p)}`));
+    });
+  });
+}
+
+init();
+</script>
+</body>
+</html>
